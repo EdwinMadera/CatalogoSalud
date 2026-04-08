@@ -38,6 +38,22 @@ module.exports = function (db, authMiddleware, adminMiddleware) {
     res.json({ total: countRow.total, limit: lim, offset: off, data: rows });
   });
 
+  // GET /api/evidencias/suggest — Autosugerencias para el buscador
+  router.get('/suggest', (req, res) => {
+    const { q } = req.query;
+    if (!q || q.trim().length < 2) return res.json([]);
+    const term = `%${q.trim()}%`;
+    const rows = db.prepare(`
+      SELECT DISTINCT e.nombre_archivo, e.tipo
+      FROM evidencias e
+      JOIN temas t ON t.id = e.tema_id
+      WHERE normalize(e.nombre_archivo) LIKE normalize(?)
+      ORDER BY e.nombre_archivo
+      LIMIT 8
+    `).all(term);
+    res.json(rows);
+  });
+
   // GET /api/evidencias/tipos — Listar tipos únicos
   router.get('/tipos', (req, res) => {
     const rows = db.prepare(

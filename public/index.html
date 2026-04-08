@@ -111,6 +111,9 @@ function App(){
   const [cursoFilter,setCursoFilter]=useState('');
   const [troncoFilter,setTroncoFilter]=useState('');
   const [showFilters,setShowFilters]=useState(false);
+  const [suggestions,setSuggestions]=useState([]);
+  const [showSuggestions,setShowSuggestions]=useState(false);
+  const debounceRef=useRef(null);
 
   const [user,setUser]=useState(getUser());
   const [authMode,setAuthMode]=useState('login');
@@ -163,8 +166,38 @@ function App(){
   useEffect(()=>{if(view==='search'&&(activeQuery||tipoFilter||cursoFilter||troncoFilter))doSearch();else if(view==='search'&&!activeQuery&&!tipoFilter&&!cursoFilter&&!troncoFilter){setResults([]);setTotalResults(0)}},[doSearch,view]);
   useEffect(()=>{setPage(0)},[activeQuery,tipoFilter,cursoFilter,troncoFilter]);
 
-  const handleSearch=(e)=>{if(e)e.preventDefault();const val=searchRef.current?searchRef.current.value.trim():'';setActiveQuery(val);setView('search')};
-  const clearAll=()=>{if(searchRef.current)searchRef.current.value='';setActiveQuery('');setTipoFilter('');setCursoFilter('');setTroncoFilter('')};
+  const handleSearch=(e)=>{if(e)e.preventDefault();setShowSuggestions(false);const val=searchRef.current?searchRef.current.value.trim():'';setActiveQuery(val);setView('search')};
+  const clearAll=()=>{if(searchRef.current)searchRef.current.value='';setActiveQuery('');setTipoFilter('');setCursoFilter('');setTroncoFilter('');setSuggestions([]);setShowSuggestions(false)};
+  const fetchSuggestions=(val)=>{
+    if(debounceRef.current)clearTimeout(debounceRef.current);
+    if(!val||val.length<2){setSuggestions([]);setShowSuggestions(false);return}
+    debounceRef.current=setTimeout(()=>{
+      apiFetch('/evidencias/suggest?q='+encodeURIComponent(val)).then(r=>{setSuggestions(r);setShowSuggestions(r.length>0)}).catch(()=>{});
+    },300);
+  };
+  const selectSuggestion=(text)=>{if(searchRef.current)searchRef.current.value=text;setSuggestions([]);setShowSuggestions(false);setActiveQuery(text);setView('search')};
+  const highlightMatch=(text,query)=>{
+    if(!query)return text;
+    const idx=text.toLowerCase().indexOf(query.toLowerCase());
+    if(idx===-1)return text;
+    return <>{text.slice(0,idx)}<strong className="font-bold text-[#111]">{text.slice(idx,idx+query.length)}</strong>{text.slice(idx+query.length)}</>;
+  };
+  const SuggestionsDropdown=()=>{
+    if(!showSuggestions||suggestions.length===0)return null;
+    const q=searchRef.current?searchRef.current.value.trim():'';
+    return(
+      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden fade-in">
+        {suggestions.map((s,i)=>{const st=ts(s.tipo);return(
+          <button key={i} type="button" onMouseDown={(e)=>{e.preventDefault();selectSuggestion(s.nombre_archivo)}}
+            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors text-left border-b border-gray-50 last:border-0">
+            <I.Search s={14} c="text-gray-300 shrink-0"/>
+            <span className="text-[13px] text-gray-600 truncate flex-1">{highlightMatch(s.nombre_archivo,q)}</span>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0" style={{background:st.bg,color:st.fg}}>{s.tipo}</span>
+          </button>
+        )})}
+      </div>
+    );
+  };
   const hasFilters=tipoFilter||cursoFilter||troncoFilter||activeQuery;
   const totalPages=Math.ceil(totalResults/LIMIT);
   const logout=()=>{clearAuth();setUser(null);setView('home')};
@@ -222,12 +255,18 @@ function App(){
       </div>
 
       {/* SEARCH BAR */}
-      <form onSubmit={handleSearch} className="flex gap-2 mb-8 slide-up delay-1">
+      <form onSubmit={handleSearch} className="flex gap-2 mb-8 slide-up delay-1 relative z-10">
         <div className="flex-1 relative">
           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"><I.Search s={18}/></div>
           <input type="text" ref={searchRef} defaultValue=""
+            onInput={(e)=>fetchSuggestions(e.target.value.trim())}
+            onFocus={(e)=>{if(e.target.value.trim().length>=2)fetchSuggestions(e.target.value.trim())}}
+            onBlur={()=>setTimeout(()=>setShowSuggestions(false),200)}
+            onKeyDown={(e)=>{if(e.key==='Escape'){setShowSuggestions(false)}}}
             placeholder="Buscar GPC por título, tema o especialidad..."
-            className="w-full bg-white border border-gray-200 rounded-xl py-3.5 pl-11 pr-4 text-[14px] text-[#111] placeholder:text-gray-400 focus:border-[#009A90] transition-colors shadow-sm"/>
+            className="w-full bg-white border border-gray-200 rounded-xl py-3.5 pl-11 pr-4 text-[14px] text-[#111] placeholder:text-gray-400 focus:border-[#009A90] transition-colors shadow-sm"
+            autoComplete="off"/>
+          <SuggestionsDropdown/>
         </div>
         <button type="submit" className="bg-[#009A90] text-white px-6 py-3.5 rounded-xl text-[14px] font-semibold hover:bg-[#00857A] transition-colors shrink-0 shadow-sm">Buscar</button>
       </form>
@@ -332,9 +371,15 @@ function App(){
         <div className="flex-1 relative">
           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"><I.Search s={18}/></div>
           <input type="text" ref={searchRef} defaultValue=""
+            onInput={(e)=>fetchSuggestions(e.target.value.trim())}
+            onFocus={(e)=>{if(e.target.value.trim().length>=2)fetchSuggestions(e.target.value.trim())}}
+            onBlur={()=>setTimeout(()=>setShowSuggestions(false),200)}
+            onKeyDown={(e)=>{if(e.key==='Escape'){setShowSuggestions(false)}}}
             placeholder="Buscar GPC por título, tema o especialidad..."
-            className="w-full bg-white border border-gray-200 rounded-xl py-3 pl-11 pr-4 text-[14px] placeholder:text-gray-400 focus:border-[#009A90] transition-colors"/>
-          {activeQuery&&<button type="button" onClick={()=>{if(searchRef.current)searchRef.current.value='';setActiveQuery('')}} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><I.X s={16}/></button>}
+            className="w-full bg-white border border-gray-200 rounded-xl py-3 pl-11 pr-4 text-[14px] placeholder:text-gray-400 focus:border-[#009A90] transition-colors"
+            autoComplete="off"/>
+          <SuggestionsDropdown/>
+          {activeQuery&&<button type="button" onClick={()=>{if(searchRef.current)searchRef.current.value='';setActiveQuery('');setSuggestions([]);setShowSuggestions(false)}} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><I.X s={16}/></button>}
         </div>
         <button type="submit" className="bg-[#009A90] text-white px-5 py-3 rounded-xl text-[13px] font-semibold hover:bg-[#00857A] transition-colors shrink-0">Buscar</button>
       </form>
