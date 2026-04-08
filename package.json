@@ -1,0 +1,19 @@
+{
+  "name": "catalogo-salud",
+  "version": "1.0.0",
+  "description": "Catálogo de Salud — Buscador de GPC, NOM y evidencias médicas",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node db/seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^11.7.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
+    "xlsx": "^0.18.5"
+  }
+}

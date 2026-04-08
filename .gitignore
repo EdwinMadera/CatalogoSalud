@@ -1,0 +1,17 @@
+node_modules/
+db/database.sqlite
+db/database.sqlite-wal
+db/database.sqlite-shm
+uploads/
+.DS_Store
+.claude/
+~$*
+*.ai
+*.pptx
+Buscador*.pdf
+Diapositiva*.jpeg
+ANALISIS_*
+buscador-gpc-nom*.html
+buscador-medico.html
+Curso ENARMAD*
+Logo catalogo*

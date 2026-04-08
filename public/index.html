@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Catálogo de Salud — Centro de Información Médica</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',system-ui,sans-serif;background:#FAFAFA;color:#111;-webkit-font-smoothing:antialiased}
+    ::selection{background:rgba(0,154,144,.15)}
+    input:focus,select:focus,textarea:focus{outline:none}
+    button{cursor:pointer}
+    .scrollbar-hide::-webkit-scrollbar{display:none}
+    .scrollbar-hide{-ms-overflow-style:none;scrollbar-width:none}
+    @media print{.no-print{display:none!important}}
+
+    /* Animations */
+    .fade-in{animation:fadeIn .3s ease-out both}
+    .slide-up{animation:slideUp .35s ease-out both}
+    .slide-right{animation:slideRight .3s ease-out both}
+    .scale-in{animation:scaleIn .25s ease-out both}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes slideRight{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+    @keyframes scaleIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+
+    /* Staggered delays */
+    .delay-1{animation-delay:.05s}.delay-2{animation-delay:.1s}.delay-3{animation-delay:.15s}
+    .delay-4{animation-delay:.2s}.delay-5{animation-delay:.25s}.delay-6{animation-delay:.3s}
+
+    /* Smooth hover transitions */
+    .hover-lift{transition:transform .2s ease,box-shadow .2s ease}
+    .hover-lift:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.08)}
+  </style>
+  <script>tailwind.config={theme:{extend:{colors:{brand:{'50':'#E6F5F4','500':'#009A90','600':'#008A81','700':'#007A72'}}}}}</script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useCallback,useRef}=React;
+
+/* ── API ── */
+const API='/api';
+function getToken(){return localStorage.getItem('token')}
+function getUser(){try{return JSON.parse(localStorage.getItem('user'))}catch{return null}}
+function saveAuth(t,u){localStorage.setItem('token',t);localStorage.setItem('user',JSON.stringify(u))}
+function clearAuth(){localStorage.removeItem('token');localStorage.removeItem('user')}
+async function apiFetch(ep,o={}){
+  const h={'Content-Type':'application/json',...(o.headers||{})};const t=getToken();if(t)h['Authorization']=`Bearer ${t}`;
+  const r=await fetch(`${API}${ep}`,{...o,headers:h});
+  if(r.status===401){clearAuth();throw new Error('No autorizado')}
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||`Error ${r.status}`)}
+  return r.json();
+}
+async function apiUpload(ep,fd){const h={};const t=getToken();if(t)h['Authorization']=`Bearer ${t}`;const r=await fetch(`${API}${ep}`,{method:'POST',headers:h,body:fd});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||`Error ${r.status}`)}return r.json()}
+
+/* ── TIPO STYLES (muted/professional) ── */
+function ts(t){
+  if(t.includes('GER'))return{bg:'#EBF0F7',fg:'#3D5A80'};
+  if(t.includes('GRR'))return{bg:'#EDE7F6',fg:'#5C527F'};
+  if(t==='NOM')return{bg:'#FDECEA',fg:'#8B3A3A'};
+  if(t==='PRONAM')return{bg:'#FFF3E0',fg:'#8B6914'};
+  if(t==='Lineamiento')return{bg:'#E0F2F1',fg:'#2E7D6F'};
+  if(t==='SSa')return{bg:'#F3E5F5',fg:'#6A1B6D'};
+  return{bg:'#ECEFF1',fg:'#546E7A'};
+}
+
+/* ── CATEGORY COLORS (for publications) ── */
+function catColor(c){
+  if(c==='Nueva GPC')return{bg:'#E8F5E9',fg:'#2E7D32'};
+  if(c==='Nueva NOM')return{bg:'#FFEBEE',fg:'#C62828'};
+  if(c==='Lineamiento')return{bg:'#E0F2F1',fg:'#00695C'};
+  if(c==='PRONAM')return{bg:'#FFF8E1',fg:'#F57F17'};
+  return{bg:'#ECEFF1',fg:'#546E7A'};
+}
+
+/* ── ICONS ── */
+const I={
+  Search:({c="",s=20})=><svg viewBox="0 0 24 24" width={s} height={s} stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className={c}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+  X:({s=14,onClick})=><svg onClick={onClick} style={{cursor:'pointer'}} viewBox="0 0 24 24" width={s} height={s} stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  File:({s=18})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  Filter:({s=16})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
+  User:({s=18})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  Logout:({s=18})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+  Upload:({s=18})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>,
+  Edit:({s=16})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  Trash:({s=16})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+  Menu:({s=22})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
+  Plus:()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  Back:({s=18})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>,
+  Bell:({s=18})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+  ExternalLink:({s=14})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>,
+  Star:({s=14})=><svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+  Info:({s=16})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
+  Flag:({s=14})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>,
+};
+
+/* ════════════════════════════════════
+   APP
+   ════════════════════════════════════ */
+function App(){
+  const [view,setView]=useState('home'); // home|search|auth|admin
+  const [searchText,setSearchText]=useState('');
+  const [activeQuery,setActiveQuery]=useState('');
+  const [tipoFilter,setTipoFilter]=useState('');
+  const [cursoFilter,setCursoFilter]=useState('');
+  const [troncoFilter,setTroncoFilter]=useState('');
+  const [showFilters,setShowFilters]=useState(false);
+
+  const [user,setUser]=useState(getUser());
+  const [authMode,setAuthMode]=useState('login');
+  const [authError,setAuthError]=useState('');
+  const [pendingUrl,setPendingUrl]=useState(null);
+  const [reportModal,setReportModal]=useState(null); // {evidencia_id, nombre}
+  const [reportMsg,setReportMsg]=useState('');
+  const [reportCat,setReportCat]=useState('Enlace roto');
+  const [reportSent,setReportSent]=useState(false);
+
+  const [results,setResults]=useState([]);
+  const [totalResults,setTotalResults]=useState(0);
+  const [loading,setLoading]=useState(false);
+  const [page,setPage]=useState(0);
+  const LIMIT=25;
+
+  const [cursos,setCursos]=useState([]);
+  const [troncos,setTroncos]=useState([]);
+  const [tipos,setTipos]=useState([]);
+  const [banners,setBanners]=useState([]);
+  const [publicaciones,setPublicaciones]=useState([]);
+  const [categorias,setCategorias]=useState([]);
+  const [stats,setStats]=useState(null);
+  const [adminTab,setAdminTab]=useState('dashboard');
+  const [adminTemas,setAdminTemas]=useState([]);
+  const [mobileMenu,setMobileMenu]=useState(false);
+
+  const isAdmin=user&&user.role==='admin';
+
+  useEffect(()=>{
+    apiFetch('/temas/cursos').then(setCursos).catch(()=>{});
+    apiFetch('/temas/troncos').then(setTroncos).catch(()=>{});
+    apiFetch('/evidencias/tipos').then(setTipos).catch(()=>{});
+    apiFetch('/banners').then(setBanners).catch(()=>{});
+    apiFetch('/publicaciones?limit=6').then(setPublicaciones).catch(()=>{});
+    apiFetch('/categorias').then(setCategorias).catch(()=>{});
+  },[]);
+
+  const doSearch=useCallback(()=>{
+    setLoading(true);
+    const p=new URLSearchParams();
+    if(activeQuery)p.set('q',activeQuery);
+    if(tipoFilter)p.set('tipo',tipoFilter);
+    if(cursoFilter)p.set('curso',cursoFilter);
+    if(troncoFilter)p.set('tronco',troncoFilter);
+    p.set('limit',LIMIT);p.set('offset',page*LIMIT);
+    apiFetch(`/evidencias?${p}`).then(r=>{setResults(r.data);setTotalResults(r.total);setLoading(false)}).catch(()=>setLoading(false));
+  },[activeQuery,tipoFilter,cursoFilter,troncoFilter,page]);
+
+  useEffect(()=>{if(view==='search')doSearch()},[doSearch,view]);
+  useEffect(()=>{setPage(0)},[activeQuery,tipoFilter,cursoFilter,troncoFilter]);
+
+  const handleSearch=(e)=>{if(e)e.preventDefault();setActiveQuery(searchText.trim());setView('search')};
+  const clearAll=()=>{setSearchText('');setActiveQuery('');setTipoFilter('');setCursoFilter('');setTroncoFilter('')};
+  const hasFilters=tipoFilter||cursoFilter||troncoFilter||activeQuery;
+  const totalPages=Math.ceil(totalResults/LIMIT);
+  const logout=()=>{clearAuth();setUser(null);setView('home')};
+
+  const afterAuth=()=>{if(pendingUrl){window.open(pendingUrl,'_blank');setPendingUrl(null);setView('search')}else{setView('home')}};
+  const handleLogin=async(e)=>{e.preventDefault();setAuthError('');const fd=new FormData(e.target);try{const r=await apiFetch('/auth/login',{method:'POST',body:JSON.stringify({email:fd.get('email'),password:fd.get('password')})});saveAuth(r.token,r.user);setUser(r.user);afterAuth()}catch(err){setAuthError(err.message)}};
+  const handleRegister=async(e)=>{e.preventDefault();setAuthError('');const fd=new FormData(e.target);const especialidades=fd.getAll('especialidades');try{const r=await apiFetch('/auth/register',{method:'POST',body:JSON.stringify({nombre:fd.get('nombre'),email:fd.get('email'),password:fd.get('password'),especialidades})});saveAuth(r.token,r.user);setUser(r.user);afterAuth()}catch(err){setAuthError(err.message)}};
+  const loadAdmin=()=>{apiFetch('/stats').then(setStats).catch(()=>{});apiFetch('/temas?limit=2000').then(r=>setAdminTemas(r.data)).catch(()=>{})};
+
+  /* ── HEADER ── */
+  const Header=()=>(
+    <header className="bg-white border-b border-gray-100 px-4 md:px-8 h-[60px] flex items-center justify-between sticky top-0 z-50" style={{boxShadow:'0 1px 3px rgba(0,0,0,0.04)'}}>
+      <button onClick={()=>{setView('home');clearAll()}} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#009A90" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" fill="#E6F5F4" stroke="#009A90"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="9" x2="14" y2="9" strokeWidth="2"/><line x1="8" y1="13" x2="14" y2="13" strokeWidth="2"/></svg>
+        <span className="font-bold text-[16px] tracking-tight text-[#111]">Catálogo <span className="text-[#009A90]">de Salud</span></span>
+      </button>
+      <nav className="flex items-center gap-2">
+        <button onClick={()=>{setView('home');clearAll()}} className="text-[13px] font-medium text-gray-500 hover:text-[#009A90] px-2 py-1 hidden md:block">Inicio</button>
+        <button onClick={()=>{setActiveQuery('');setView('search')}} className="text-[13px] font-medium text-gray-500 hover:text-[#009A90] px-2 py-1 hidden md:block">Buscador</button>
+        {user?(
+          <>
+            {isAdmin&&<button onClick={()=>{setView('admin');loadAdmin()}} className="text-[13px] font-medium text-gray-500 hover:text-[#009A90] px-2 py-1 hidden md:block">Admin</button>}
+            <span className="text-[11px] text-gray-400 hidden md:inline px-2">{user.nombre}</span>
+            <button onClick={logout} className="text-gray-400 hover:text-gray-600 p-1" title="Salir"><I.Logout s={16}/></button>
+          </>
+        ):(
+          <>
+            <button onClick={()=>{setView('auth');setAuthMode('login')}} className="text-[13px] font-medium text-gray-600 hover:text-[#009A90] px-3 py-1.5 border border-gray-200 rounded-lg hover:border-gray-300">Iniciar sesión</button>
+            <button onClick={()=>{setView('auth');setAuthMode('register')}} className="text-[13px] font-medium text-white bg-[#009A90] px-3 py-1.5 rounded-lg hover:bg-[#00857A] hidden md:block">Registrarse</button>
+          </>
+        )}
+        <button className="md:hidden text-gray-500 p-1" onClick={()=>setMobileMenu(!mobileMenu)}><I.Menu s={20}/></button>
+      </nav>
+      {mobileMenu&&<div className="absolute top-[60px] left-0 right-0 bg-white border-b border-gray-200 p-4 flex flex-col gap-2 md:hidden z-50">
+        <button onClick={()=>{setView('home');setMobileMenu(false)}} className="text-left text-[14px] text-gray-700 py-2">Inicio</button>
+        <button onClick={()=>{setView('search');setMobileMenu(false)}} className="text-left text-[14px] text-gray-700 py-2">Buscador</button>
+        {isAdmin&&<button onClick={()=>{setView('admin');loadAdmin();setMobileMenu(false)}} className="text-left text-[14px] text-[#009A90] py-2">Administrador</button>}
+      </div>}
+    </header>
+  );
+
+  /* ════════════════════════════
+     HOME VIEW — Centro de información
+     ════════════════════════════ */
+  const HomeView=()=>{
+    const headerBanners=banners.filter(b=>b.posicion==='header');
+    const destacadas=publicaciones.filter(p=>p.destacado);
+    const recientes=publicaciones.filter(p=>!p.destacado);
+    return(
+    <main className="max-w-[960px] mx-auto px-4 md:px-8 py-8 md:py-12">
+      {/* HERO */}
+      <div className="mb-8 fade-in">
+        <h1 className="text-[32px] md:text-[44px] font-bold tracking-tight text-[#111] leading-[1.1] mb-2">Centro de información médica</h1>
+        <p className="text-gray-500 text-[15px] md:text-[16px]">Guías de Práctica Clínica, NOM, PRONAM y documentos oficiales mexicanos</p>
+      </div>
+
+      {/* SEARCH BAR */}
+      <form onSubmit={handleSearch} className="flex gap-2 mb-8 slide-up delay-1">
+        <div className="flex-1 relative">
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"><I.Search s={18}/></div>
+          <input type="text" value={searchText} onChange={e=>setSearchText(e.target.value)}
+            placeholder="Buscar GPC por título, tema o especialidad..."
+            className="w-full bg-white border border-gray-200 rounded-xl py-3.5 pl-11 pr-4 text-[14px] text-[#111] placeholder:text-gray-400 focus:border-[#009A90] transition-colors shadow-sm"/>
+        </div>
+        <button type="submit" className="bg-[#009A90] text-white px-6 py-3.5 rounded-xl text-[14px] font-semibold hover:bg-[#00857A] transition-colors shrink-0 shadow-sm">Buscar</button>
+      </form>
+
+      {/* ANUNCIO PRINCIPAL — Banner grande con imagen */}
+      {headerBanners.length>0&&<div className="mb-8 space-y-4 slide-up delay-2">{headerBanners.map(b=>(
+        <a key={b.id} href={b.enlace_url||'#'} target={b.enlace_url&&b.enlace_url!=='#'?'_blank':undefined}
+          className="block rounded-2xl overflow-hidden hover:shadow-lg transition-all group relative" style={{background:'linear-gradient(135deg, #009A90 0%, #00B4A8 50%, #007A72 100%)'}}>
+          <div className="flex flex-col md:flex-row">
+            {b.imagen_url&&<div className="md:w-2/5 h-48 md:h-auto"><img src={b.imagen_url} className="w-full h-full object-cover" onError={e=>e.target.parentElement.style.display='none'}/></div>}
+            <div className={`flex-1 p-6 md:p-8 flex flex-col justify-center ${b.imagen_url?'':'text-center py-10'}`}>
+              <div className="flex items-center gap-2 mb-2"><span className="bg-white/20 text-white px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">Anuncio</span></div>
+              <h2 className="text-[22px] md:text-[28px] font-bold text-white leading-tight mb-2 group-hover:underline">{b.titulo}</h2>
+              {b.descripcion&&<p className="text-white/80 text-[14px] md:text-[15px] leading-relaxed mb-4">{b.descripcion}</p>}
+              <div className="flex items-center gap-2"><span className="bg-white text-[#009A90] px-4 py-2 rounded-lg text-[13px] font-bold group-hover:bg-gray-100 transition-colors">Ver más</span></div>
+            </div>
+          </div>
+        </a>
+      ))}</div>}
+
+      {/* PUBLICACIONES DESTACADAS — Cards visuales */}
+      {destacadas.length>0&&(
+        <div className="mb-10 slide-up delay-3">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2"><I.Star s={16}/><h2 className="text-[18px] font-bold text-[#111]">Destacadas</h2></div>
+            <span className="text-[11px] text-gray-400 bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-semibold">Nuevo</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {destacadas.map(p=>{const cc=catColor(p.categoria);return(
+              <a key={p.id} href={p.enlace_url||'#'} target={p.enlace_url&&p.enlace_url!=='#'?'_blank':undefined}
+                className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md hover:border-gray-300 transition-all group hover-lift">
+                {p.imagen_url&&<div className="h-36 bg-gray-100"><img src={p.imagen_url} className="w-full h-full object-cover" onError={e=>e.target.parentElement.style.display='none'}/></div>}
+                <div className="p-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold" style={{backgroundColor:cc.bg,color:cc.fg}}>{p.categoria}</span>
+                    <span className="text-[11px] text-gray-400">{p.fecha}</span>
+                  </div>
+                  <h3 className="text-[15px] font-bold text-[#111] leading-snug mb-2 group-hover:text-[#009A90] transition-colors">{p.titulo}</h3>
+                  <p className="text-[13px] text-gray-500 leading-relaxed line-clamp-2">{p.descripcion}</p>
+                  <div className="flex items-center gap-1 mt-3 text-[12px] text-[#009A90] font-medium">Ver publicación <I.ExternalLink s={12}/></div>
+                </div>
+              </a>
+            )})}
+          </div>
+        </div>
+      )}
+
+      {/* PUBLICACIONES RECIENTES */}
+      {recientes.length>0&&(
+        <div className="mb-10 slide-up delay-4">
+          <div className="flex items-center gap-2 mb-4">
+            <I.Bell s={16}/>
+            <h2 className="text-[18px] font-bold text-[#111]">Publicaciones recientes</h2>
+          </div>
+          <div className="space-y-3">
+            {recientes.map(p=>{const cc=catColor(p.categoria);return(
+              <a key={p.id} href={p.enlace_url||'#'} target={p.enlace_url&&p.enlace_url!=='#'?'_blank':undefined}
+                className="flex items-start gap-4 bg-white border border-gray-200 rounded-xl px-5 py-4 hover:border-gray-300 hover:shadow-sm transition-all group hover-lift">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{backgroundColor:cc.bg}}><I.File s={18}/></div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold" style={{backgroundColor:cc.bg,color:cc.fg}}>{p.categoria}</span>
+                    <span className="text-[11px] text-gray-400">{p.fecha}</span>
+                    <span className="text-[11px] text-gray-300">·</span>
+                    <span className="text-[11px] text-gray-400">{p.fuente}</span>
+                  </div>
+                  <h3 className="text-[14px] font-semibold text-[#111] group-hover:text-[#009A90] transition-colors leading-snug">{p.titulo}</h3>
+                  <p className="text-[12px] text-gray-500 mt-1 line-clamp-1">{p.descripcion}</p>
+                </div>
+                <div className="text-gray-300 group-hover:text-[#009A90] transition-colors shrink-0 mt-2"><I.ExternalLink s={14}/></div>
+              </a>
+            )})}
+          </div>
+        </div>
+      )}
+
+      {/* QUICK ACCESS — Categorías personalizables */}
+      {categorias.length>0&&<div className="mb-8 slide-up delay-5">
+        <h2 className="text-[18px] font-bold text-[#111] mb-4">Explorar por especialidad</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+          {categorias.map(c=>(
+            <button key={c.id} onClick={()=>{setCursoFilter(c.nombre);setActiveQuery('');setView('search')}}
+              className="text-left bg-white border border-gray-200 rounded-lg px-3 py-2.5 transition-all group hover-lift" style={{borderLeftColor:c.color,borderLeftWidth:'3px'}}>
+              <p className="text-[12px] font-semibold text-gray-700 group-hover:text-[#009A90] truncate">{c.nombre}</p>
+              {c.descripcion&&<p className="text-[11px] text-gray-400 truncate">{c.descripcion}</p>}
+            </button>
+          ))}
+        </div>
+      </div>}
+    </main>)
+  };
+
+  /* ════════════════════════════
+     SEARCH VIEW — Resultados GPC
+     ════════════════════════════ */
+  const SearchView=()=>{
+    const resultBanners=banners.filter(b=>b.posicion==='resultados');
+    return(
+    <main className="max-w-[960px] mx-auto px-4 md:px-8 py-8">
+      {/* SEARCH BAR */}
+      <form onSubmit={handleSearch} className="flex gap-2 mb-4">
+        <div className="flex-1 relative">
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"><I.Search s={18}/></div>
+          <input type="text" value={searchText} onChange={e=>setSearchText(e.target.value)}
+            placeholder="Buscar GPC por título, tema o especialidad..."
+            className="w-full bg-white border border-gray-200 rounded-xl py-3 pl-11 pr-4 text-[14px] placeholder:text-gray-400 focus:border-[#009A90] transition-colors"/>
+          {searchText&&<button type="button" onClick={()=>{setSearchText('');setActiveQuery('')}} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><I.X s={16}/></button>}
+        </div>
+        <button type="submit" className="bg-[#009A90] text-white px-5 py-3 rounded-xl text-[13px] font-semibold hover:bg-[#00857A] transition-colors shrink-0">Buscar</button>
+      </form>
+
+      {/* FILTERS */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <button onClick={()=>setShowFilters(!showFilters)} className="flex items-center gap-1.5 text-[12px] font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+          <I.Filter s={13}/>Filtros{hasFilters&&<span className="w-1.5 h-1.5 bg-[#009A90] rounded-full"/>}
+        </button>
+        {tipoFilter&&<span className="flex items-center gap-1.5 text-[11px] font-medium text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg">{tipoFilter}<I.X s={12} onClick={()=>setTipoFilter('')}/></span>}
+        {cursoFilter&&<span className="flex items-center gap-1.5 text-[11px] font-medium text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg">{cursoFilter}<I.X s={12} onClick={()=>setCursoFilter('')}/></span>}
+        {troncoFilter&&<span className="flex items-center gap-1.5 text-[11px] font-medium text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg">{troncoFilter}<I.X s={12} onClick={()=>setTroncoFilter('')}/></span>}
+        {hasFilters&&<button onClick={clearAll} className="text-[11px] text-gray-400 hover:text-[#009A90] underline">Limpiar</button>}
+      </div>
+
+      {showFilters&&(
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-5" style={{boxShadow:'0 4px 12px rgba(0,0,0,0.04)'}}>
+          <div className="flex items-center justify-between mb-3"><h3 className="text-[14px] font-bold text-gray-700 flex items-center gap-2"><I.Filter s={14}/>Filtros</h3><button onClick={()=>setShowFilters(false)} className="text-gray-400 hover:text-gray-600"><I.X s={16}/></button></div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div><label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Tipo de documento</label><select value={tipoFilter} onChange={e=>setTipoFilter(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] bg-gray-50 focus:border-[#009A90] focus:bg-white transition-colors"><option value="">Todos</option>{tipos.map(t=><option key={t.tipo} value={t.tipo}>{t.tipo} ({t.total})</option>)}</select></div>
+            <div><label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Tronco</label><select value={troncoFilter} onChange={e=>{setTroncoFilter(e.target.value);setCursoFilter('')}} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] bg-gray-50 focus:border-[#009A90] focus:bg-white transition-colors"><option value="">Todos</option>{troncos.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+            <div><label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Especialidad</label><select value={cursoFilter} onChange={e=>setCursoFilter(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] bg-gray-50 focus:border-[#009A90] focus:bg-white transition-colors"><option value="">Todas</option>{(troncoFilter?cursos.filter(c=>c.tronco===troncoFilter):cursos).map(c=><option key={c.curso} value={c.curso}>{c.curso} ({c.total})</option>)}</select></div>
+          </div>
+        </div>
+      )}
+
+      <div className="text-[12px] text-gray-400 mb-4 pb-3 border-b border-gray-100">{loading?'Buscando...':`${totalResults.toLocaleString()} documentos`}</div>
+
+      {/* RESULTS */}
+      <div className="space-y-2">
+        {results.map((ev,idx)=>{const t=ts(ev.tipo);return(<div key={ev.id}>
+          {idx===10&&resultBanners.length>0&&<div className="py-3">{resultBanners.map(b=>(
+            <a key={b.id} href={b.enlace_url||'#'} className="flex items-center gap-3 bg-brand-50 border border-[#B3E3E0] rounded-xl px-4 py-3 hover:bg-[#D9F0EE] transition-colors group">
+              <div className="w-8 h-8 bg-[#009A90] rounded flex items-center justify-center text-white text-[10px] font-bold shrink-0">AD</div>
+              <div><p className="text-[13px] font-semibold text-[#007A72] group-hover:underline">{b.titulo}</p>{b.descripcion&&<p className="text-[11px] text-[#009A90]">{b.descripcion}</p>}</div>
+            </a>
+          ))}</div>}
+          <div className="bg-white border border-gray-200 rounded-xl px-4 py-3.5 hover:border-gray-300 transition-colors slide-up" style={{animationDelay:`${Math.min(idx,8)*40}ms`}}>
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{backgroundColor:t.bg}}><I.File s={16}/></div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold" style={{backgroundColor:t.bg,color:t.fg}}>{ev.tipo}</span>
+                  <span className="text-[11px] text-gray-400">{ev.curso}</span>
+                </div>
+                <p className="text-[13px] font-semibold text-[#111] leading-snug mb-0.5">{ev.nombre_archivo}</p>
+                <p className="text-[11px] text-gray-400">Tema: {ev.tema_nombre}</p>
+                {ev.cita_vancouver&&<p className="text-[11px] text-gray-500 leading-relaxed mt-1 line-clamp-2">{ev.cita_vancouver}</p>}
+                {/* ACTION BUTTONS — below content on mobile, inline on desktop */}
+                <div className="flex items-center gap-1.5 mt-2.5">
+                  {ev.acceso_directo&&ev.acceso_directo.startsWith('http')&&<button onClick={()=>{if(!user){setPendingUrl(ev.acceso_directo);setView('auth');setAuthMode('register')}else{window.open(ev.acceso_directo,'_blank')}}} title="Abrir documento" className="h-8 px-3 rounded-lg bg-[#009A90] flex items-center justify-center gap-1.5 text-white hover:bg-[#00857A] transition-colors text-[11px] font-medium"><I.File s={14}/>Abrir</button>}
+                  {ev.url_fuente&&<button onClick={()=>{if(!user){setPendingUrl(ev.url_fuente);setView('auth');setAuthMode('register')}else{window.open(ev.url_fuente,'_blank')}}} title="Fuente oficial" className="h-8 px-3 rounded-lg border border-gray-200 flex items-center justify-center gap-1.5 text-gray-500 hover:text-[#009A90] hover:border-[#009A90] transition-colors text-[11px] font-medium"><I.ExternalLink s={12}/>Fuente</button>}
+                  <button onClick={()=>{if(!user){setView('auth');setAuthMode('register')}else{setReportModal({evidencia_id:ev.id,nombre:ev.nombre_archivo});setReportMsg('');setReportCat('Enlace roto');setReportSent(false)}}} title="Reportar" className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-amber-500 transition-colors ml-auto"><I.Flag s={13}/></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>)})}
+        {results.length===0&&!loading&&<div className="text-center py-16"><div className="w-14 h-14 mx-auto mb-3 rounded-full bg-gray-100 flex items-center justify-center"><I.Search c="text-gray-300" s={24}/></div><p className="text-gray-500 text-[14px] mb-1">No se encontraron documentos</p><button onClick={clearAll} className="text-[13px] text-[#009A90] font-medium hover:underline">Limpiar filtros</button></div>}
+      </div>
+
+      {totalPages>1&&<div className="flex items-center justify-center gap-2 mt-6 pt-4 border-t border-gray-100">
+        <button onClick={()=>setPage(Math.max(0,page-1))} disabled={page===0} className="px-3 py-1.5 rounded-lg text-[12px] font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30">Anterior</button>
+        <span className="text-[12px] text-gray-400 px-3">Página {page+1} de {totalPages}</span>
+        <button onClick={()=>setPage(Math.min(totalPages-1,page+1))} disabled={page>=totalPages-1} className="px-3 py-1.5 rounded-lg text-[12px] font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30">Siguiente</button>
+      </div>}
+    </main>)
+  };
+
+  /* ── AUTH VIEW ── */
+  const AuthView=()=>(
+    <main className="max-w-[400px] mx-auto px-4 py-16">
+      <div className="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 scale-in" style={{boxShadow:'0 4px 20px rgba(0,0,0,0.05)'}}>
+        <div className="text-center mb-6"><div className="w-12 h-12 bg-brand-50 rounded-xl flex items-center justify-center mx-auto mb-3"><I.User s={22}/></div><h2 className="text-[22px] font-bold text-[#111]">{authMode==='login'?'Iniciar sesión':'Crear cuenta'}</h2><p className="text-[13px] text-gray-400 mt-1">{pendingUrl?'Regístrate gratis para acceder a los documentos':authMode==='login'?'Accede a tu cuenta':'Regístrate gratis'}</p></div>
+        {authError&&<div className="bg-red-50 border border-red-200 text-red-700 text-[12px] rounded-lg px-3 py-2 mb-4">{authError}</div>}
+        <form onSubmit={authMode==='login'?handleLogin:handleRegister} className="space-y-3">
+          {authMode==='register'&&<div><label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Nombre</label><input name="nombre" required className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:border-[#009A90] transition-colors" placeholder="Tu nombre"/></div>}
+          <div><label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Email</label><input name="email" type="email" required className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:border-[#009A90] transition-colors" placeholder="tu@email.com"/></div>
+          <div><label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Contraseña</label><input name="password" type="password" required minLength={6} className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:border-[#009A90] transition-colors" placeholder="Mínimo 6 caracteres"/></div>
+          <button type="submit" className="w-full bg-[#009A90] text-white py-2.5 rounded-lg text-[14px] font-semibold hover:bg-[#00857A] transition-colors">{authMode==='login'?'Entrar':'Registrarse'}</button>
+        </form>
+        <p className="text-center text-[12px] text-gray-400 mt-4">{authMode==='login'?<>¿No tienes cuenta? <button onClick={()=>{setAuthMode('register');setAuthError('')}} className="text-[#009A90] font-semibold hover:underline">Regístrate</button></>:<>¿Ya tienes cuenta? <button onClick={()=>{setAuthMode('login');setAuthError('')}} className="text-[#009A90] font-semibold hover:underline">Inicia sesión</button></>}</p>
+      </div>
+    </main>
+  );
+
+  /* ── ADMIN VIEW (simplified - same as before) ── */
+  const AdminView=()=>{
+    const [allBanners,setAllBanners]=useState([]);
+    const [allPubs,setAllPubs]=useState([]);
+    const [detailTema,setDetailTema]=useState(null);
+    const [showForm,setShowForm]=useState(null); // 'tema'|'banner'|'pub'|null
+    const [editItem,setEditItem]=useState(null);
+    const [uploadResult,setUploadResult]=useState(null);
+    const [uploading,setUploading]=useState(false);
+    const fileRef=useRef(null);
+    const [adminSearch,setAdminSearch]=useState('');
+    // Form fields
+    const [f,setF]=useState({});
+    const uf=(k,v)=>setF(p=>({...p,[k]:v}));
+
+    useEffect(()=>{
+      if(adminTab==='banners')apiFetch('/banners/all').then(setAllBanners).catch(()=>{});
+      if(adminTab==='categorias')apiFetch('/categorias/all').then(d=>setF(p=>({...p,_cats:d}))).catch(()=>{});
+      if(adminTab==='usuarios')apiFetch('/auth/users').then(d=>setF(p=>({...p,_users:d}))).catch(()=>{});
+      if(adminTab==='reportes')apiFetch('/reportes').then(d=>setF(p=>({...p,_reportes:d}))).catch(()=>{});
+      if(adminTab==='publicaciones')apiFetch('/publicaciones/all').then(setAllPubs).catch(()=>{});
+    },[adminTab]);
+
+    const filtered=adminTemas.filter(d=>!adminSearch.trim()||d.nombre.toLowerCase().includes(adminSearch.toLowerCase()));
+
+    const handleUpload=async()=>{const fi=fileRef.current?.files?.[0];if(!fi)return;setUploading(true);setUploadResult(null);const fd=new FormData();fd.append('file',fi);try{const r=await apiUpload('/upload/excel',fd);setUploadResult({ok:true,msg:r.message});loadAdmin()}catch(err){setUploadResult({ok:false,msg:err.message})}setUploading(false);fileRef.current.value=''};
+
+    return(
+      <main className="max-w-[960px] mx-auto px-4 md:px-8 py-8">
+        <h1 className="text-[24px] font-bold text-[#111] mb-1">Administración</h1>
+        <p className="text-[13px] text-gray-400 mb-6">Gestiona documentos, publicaciones y publicidad</p>
+
+        <div className="flex items-center gap-4 mb-6 border-b border-gray-200 overflow-x-auto scrollbar-hide">
+          {[['dashboard','Resumen'],['guias','Guías'],['temas','Temas'],['categorias','Categorías'],['upload','Carga Excel'],['publicaciones','Publicaciones'],['banners','Publicidad'],['usuarios','Usuarios'],['reportes','Reportes']].map(([id,l])=>(
+            <button key={id} onClick={()=>setAdminTab(id)} className={`pb-2.5 text-[13px] font-medium whitespace-nowrap relative ${adminTab===id?'text-[#009A90]':'text-gray-400 hover:text-gray-600'}`}>
+              {l}{adminTab===id&&<div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#009A90]"/>}
+            </button>
+          ))}
+        </div>
+
+        {/* DASHBOARD */}
+        {adminTab==='dashboard'&&stats&&<div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            {[['Temas',stats.totalTemas],['Documentos',stats.totalEvidencias],['Especialidades',stats.cursos],['Usuarios',stats.totalUsuarios]].map(([l,v])=>
+              <div key={l} className="bg-white border border-gray-200 rounded-xl p-4"><p className="text-[11px] text-gray-400 uppercase tracking-wider mb-1">{l}</p><p className="text-[28px] font-bold text-[#111]">{v}</p></div>
+            )}
+          </div>
+          <div className="bg-white border border-gray-200 rounded-xl p-5"><p className="text-[14px] font-semibold text-[#111] mb-3">Por tipo</p>{stats.porTipo&&stats.porTipo.map(t=>{const s=ts(t.tipo);const pct=((t.total/stats.totalEvidencias)*100).toFixed(0);return<div key={t.tipo} className="flex items-center gap-3 mb-2"><span className="w-20 text-[11px] font-medium text-right" style={{color:s.fg}}>{t.tipo}</span><div className="flex-1 bg-gray-100 rounded h-2"><div className="h-2 rounded" style={{width:`${pct}%`,backgroundColor:s.fg}}/></div><span className="w-10 text-[11px] text-gray-500 text-right">{t.total}</span></div>})}</div>
+        </div>}
+
+        {/* TEMAS */}
+        {/* GUÍAS — Documents as main items */}
+        {adminTab==='guias'&&<div>
+          <div className="flex flex-col sm:flex-row justify-between gap-3 mb-4">
+            <form onSubmit={e=>{e.preventDefault();const q=f._guiaSearch||'';apiFetch(`/evidencias?q=${q}&limit=50`).then(r=>setF(p=>({...p,_guias:r.data,_guiasTotal:r.total})))}} className="flex gap-2 w-full sm:w-auto">
+              <input type="text" value={f._guiaSearch||''} onChange={e=>uf('_guiaSearch',e.target.value)} placeholder="Buscar guía por título..." className="w-full sm:w-80 border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+              <button type="submit" className="bg-[#009A90] text-white px-4 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A] shrink-0">Buscar</button>
+            </form>
+          </div>
+          {!(f._guias)&&<p className="text-[13px] text-gray-400 mb-4">Busca una guía por título para ver y editar sus datos.</p>}
+          {f._guias&&<div>
+            <p className="text-[12px] text-gray-400 mb-3">{f._guiasTotal} documentos encontrados</p>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <table className="w-full text-left"><thead><tr className="border-b border-gray-100 text-[11px] text-gray-400 uppercase tracking-wider"><th className="px-4 py-2.5">Guía / Documento</th><th className="px-4 py-2.5 hidden md:table-cell">Tipo</th><th className="px-4 py-2.5 hidden md:table-cell">Tema</th><th className="px-4 py-2.5 w-28">Enlaces</th><th className="px-4 py-2.5 w-20"></th></tr></thead>
+              <tbody className="text-[13px]">{f._guias.map(g=>{const s=ts(g.tipo);return(
+                <tr key={g.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                  <td className="px-4 py-2.5 font-medium max-w-[350px]"><p className="truncate">{g.nombre_archivo}</p></td>
+                  <td className="px-4 py-2.5 hidden md:table-cell"><span className="px-2 py-0.5 rounded text-[10px] font-semibold" style={{backgroundColor:s.bg,color:s.fg}}>{g.tipo}</span></td>
+                  <td className="px-4 py-2.5 text-gray-400 text-[11px] hidden md:table-cell">{g.tema_nombre}</td>
+                  <td className="px-4 py-2.5"><div className="flex gap-1">{g.acceso_directo&&g.acceso_directo.startsWith('http')&&<a href={g.acceso_directo} target="_blank" className="text-[10px] text-[#009A90] hover:underline">Drive</a>}{g.url_fuente&&<a href={g.url_fuente} target="_blank" className="text-[10px] text-gray-400 hover:underline ml-1">Fuente</a>}</div></td>
+                  <td className="px-4 py-2.5"><div className="flex gap-1 justify-end"><button onClick={()=>{setEditItem(g);setF(p=>({...p,_editGuia:g}));setShowForm('guia')}} className="text-gray-400 hover:text-[#009A90] p-1"><I.Edit/></button><button onClick={()=>{if(confirm('¿Eliminar esta guía?')){apiFetch(`/evidencias/${g.id}`,{method:'DELETE'}).then(()=>{const q=f._guiaSearch||'';apiFetch(`/evidencias?q=${q}&limit=50`).then(r=>setF(p=>({...p,_guias:r.data,_guiasTotal:r.total})))})}}} className="text-gray-400 hover:text-red-500 p-1"><I.Trash/></button></div></td>
+                </tr>
+              )})}</tbody></table>
+            </div>
+          </div>}
+          {showForm==='guia'&&f._editGuia&&<div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100] p-4 fade-in" onClick={()=>setShowForm(null)}>
+            <div className="bg-white rounded-xl p-5 w-full max-w-[500px] shadow-2xl space-y-3" onClick={e=>e.stopPropagation()}>
+              <h3 className="text-[15px] font-bold">Editar guía</h3>
+              <div><label className="block text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Nombre del archivo</label><input value={f._editGuia.nombre_archivo||''} onChange={e=>uf('_editGuia',{...f._editGuia,nombre_archivo:e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/></div>
+              <div className="grid grid-cols-3 gap-3">
+                <div><label className="block text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Tipo</label><select value={f._editGuia.tipo||''} onChange={e=>uf('_editGuia',{...f._editGuia,tipo:e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px]">{['GPC [GER]','GPC [GRR]','NOM','PRONAM','Lineamiento','SSa'].map(t=><option key={t}>{t}</option>)}</select></div>
+                <div><label className="block text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Categoría</label><select value={f._editGuia.categoria_id||''} onChange={e=>uf('_editGuia',{...f._editGuia,categoria_id:parseInt(e.target.value)||null})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px]"><option value="">Sin categoría</option>{categorias.map(c=><option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div>
+                <div><label className="block text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Tema</label><p className="text-[12px] text-gray-500 py-2">{f._editGuia.tema_nombre}</p></div>
+              </div>
+              <div><label className="block text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Enlace Drive (respaldo)</label><input value={f._editGuia.acceso_directo||''} onChange={e=>uf('_editGuia',{...f._editGuia,acceso_directo:e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/></div>
+              <div><label className="block text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">URL fuente original</label><input value={f._editGuia.url_fuente||''} onChange={e=>uf('_editGuia',{...f._editGuia,url_fuente:e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/></div>
+              <div><label className="block text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Cita Vancouver</label><textarea value={f._editGuia.cita_vancouver||''} onChange={e=>uf('_editGuia',{...f._editGuia,cita_vancouver:e.target.value})} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] focus:border-[#009A90]"/></div>
+              <div className="flex gap-2"><button onClick={async()=>{try{await apiFetch(`/evidencias/${f._editGuia.id}`,{method:'PUT',body:JSON.stringify({nombre_archivo:f._editGuia.nombre_archivo,tipo:f._editGuia.tipo,acceso_directo:f._editGuia.acceso_directo,cita_vancouver:f._editGuia.cita_vancouver,categoria_id:f._editGuia.categoria_id})});setShowForm(null);const q=f._guiaSearch||'';apiFetch(`/evidencias?q=${q}&limit=50`).then(r=>setF(p=>({...p,_guias:r.data,_guiasTotal:r.total})))}catch(err){alert(err.message)}}} className="bg-[#009A90] text-white px-4 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A]">Guardar</button><button onClick={()=>setShowForm(null)} className="px-4 py-2 rounded-lg text-[12px] text-gray-500 border border-gray-200 hover:bg-gray-50">Cancelar</button></div>
+            </div>
+          </div>}
+        </div>}
+
+        {/* CATEGORÍAS */}
+        {adminTab==='categorias'&&<div>
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-[14px] font-semibold">Categorías del inicio</p>
+            <button onClick={()=>{setShowForm('cat');setEditItem(null);setF(p=>({...p,cat_nombre:'',cat_desc:'',cat_color:'#009A90',cat_orden:0,cat_visible:1}))}} className="flex items-center gap-1.5 bg-[#009A90] text-white px-3 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A]"><I.Plus/>Nueva</button>
+          </div>
+          {showForm==='cat'&&<form onSubmit={async e=>{e.preventDefault();try{const body={nombre:f.cat_nombre,descripcion:f.cat_desc,color:f.cat_color,orden:parseInt(f.cat_orden)||0,visible:parseInt(f.cat_visible)};if(editItem)await apiFetch(`/categorias/${editItem.id}`,{method:'PUT',body:JSON.stringify(body)});else await apiFetch('/categorias',{method:'POST',body:JSON.stringify(body)});setShowForm(null);apiFetch('/categorias/all').then(d=>setF(p=>({...p,_cats:d})));apiFetch('/categorias').then(setCategorias)}catch(err){alert(err.message)}}} className="bg-white border border-gray-200 rounded-xl p-4 mb-4 space-y-3">
+            <input value={f.cat_nombre||''} onChange={e=>uf('cat_nombre',e.target.value)} required placeholder="Nombre de la categoría" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+            <input value={f.cat_desc||''} onChange={e=>uf('cat_desc',e.target.value)} placeholder="Descripción (opcional)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+            <div className="grid grid-cols-3 gap-3">
+              <div><label className="block text-[10px] text-gray-400 mb-0.5">Color</label><div className="flex gap-2 items-center"><input type="color" value={f.cat_color||'#009A90'} onChange={e=>uf('cat_color',e.target.value)} className="w-8 h-8 rounded border border-gray-200 cursor-pointer"/><span className="text-[11px] text-gray-500">{f.cat_color}</span></div></div>
+              <div><label className="block text-[10px] text-gray-400 mb-0.5">Orden</label><input type="number" value={f.cat_orden||0} onChange={e=>uf('cat_orden',e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/></div>
+              <div><label className="block text-[10px] text-gray-400 mb-0.5">Visible</label><select value={f.cat_visible??1} onChange={e=>uf('cat_visible',e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px]"><option value={1}>Sí</option><option value={0}>No</option></select></div>
+            </div>
+            <div className="flex gap-2"><button type="submit" className="bg-[#009A90] text-white px-4 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A]">{editItem?'Actualizar':'Crear'}</button><button type="button" onClick={()=>setShowForm(null)} className="px-4 py-2 rounded-lg text-[12px] text-gray-500 border border-gray-200 hover:bg-gray-50">Cancelar</button></div>
+          </form>}
+          <div className="space-y-2">
+            {(f._cats||[]).map(c=>(
+              <div key={c.id} className={`bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between ${c.visible?'':'opacity-40'}`} style={{borderLeftColor:c.color,borderLeftWidth:'3px'}}>
+                <div><p className="text-[13px] font-medium">{c.nombre}</p><p className="text-[11px] text-gray-400">{c.descripcion||'Sin descripción'} · Orden: {c.orden} · {c.visible?'Visible':'Oculta'}</p></div>
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={()=>{setEditItem(c);setF(p=>({...p,cat_nombre:c.nombre,cat_desc:c.descripcion||'',cat_color:c.color||'#009A90',cat_orden:c.orden,cat_visible:c.visible}));setShowForm('cat')}} className="text-gray-400 hover:text-[#009A90] p-1"><I.Edit/></button>
+                  <button onClick={()=>{if(confirm('¿Eliminar categoría?')){apiFetch(`/categorias/${c.id}`,{method:'DELETE'}).then(()=>{apiFetch('/categorias/all').then(d=>setF(p=>({...p,_cats:d})));apiFetch('/categorias').then(setCategorias)})}}} className="text-gray-400 hover:text-red-500 p-1"><I.Trash/></button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {(f._cats||[]).length===0&&<p className="text-center text-gray-400 py-8 text-[13px]">Sin categorías</p>}
+        </div>}
+
+        {adminTab==='temas'&&<div>
+          <div className="flex flex-col sm:flex-row justify-between gap-3 mb-4">
+            <input type="text" value={adminSearch} onChange={e=>setAdminSearch(e.target.value)} placeholder="Buscar tema..." className="w-full sm:w-64 border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+            <button onClick={()=>{setShowForm('tema');setEditItem(null);setF({nombre:'',tronco:'Medicina interna',curso:'',estado:'Publicado'})}} className="flex items-center gap-1.5 bg-[#009A90] text-white px-4 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A] shrink-0"><I.Plus/>Nuevo</button>
+          </div>
+          {showForm==='tema'&&<form onSubmit={async e=>{e.preventDefault();try{if(editItem)await apiFetch(`/temas/${editItem.id}`,{method:'PUT',body:JSON.stringify(f)});else await apiFetch('/temas',{method:'POST',body:JSON.stringify(f)});setShowForm(null);loadAdmin()}catch(err){alert(err.message)}}} className="bg-white border border-gray-200 rounded-xl p-4 mb-4 space-y-3">
+            <input value={f.nombre||''} onChange={e=>uf('nombre',e.target.value)} required placeholder="Nombre del tema" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+            <div className="grid grid-cols-3 gap-3">
+              <select value={f.tronco||''} onChange={e=>uf('tronco',e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-[13px]"><option>Medicina interna</option><option>Cirugía</option><option>Pediatría</option><option>Ginecología y obstetricia</option></select>
+              <input value={f.curso||''} onChange={e=>uf('curso',e.target.value)} required placeholder="Especialidad" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+              <select value={f.estado||''} onChange={e=>uf('estado',e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-[13px]"><option>Publicado</option><option>Borrador</option></select>
+            </div>
+            <div className="flex gap-2"><button type="submit" className="bg-[#009A90] text-white px-4 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A]">{editItem?'Actualizar':'Crear'}</button><button type="button" onClick={()=>setShowForm(null)} className="px-4 py-2 rounded-lg text-[12px] text-gray-500 border border-gray-200 hover:bg-gray-50">Cancelar</button></div>
+          </form>}
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <table className="w-full text-left"><thead><tr className="border-b border-gray-100 text-[11px] text-gray-400 uppercase tracking-wider"><th className="px-4 py-2.5">Tema</th><th className="px-4 py-2.5 hidden md:table-cell">Especialidad</th><th className="px-4 py-2.5 text-center">Docs</th><th className="px-4 py-2.5 w-24"></th></tr></thead>
+            <tbody className="text-[13px]">{filtered.slice(0,80).map(t=><tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50"><td className="px-4 py-2.5 font-medium max-w-[300px]"><span className="cursor-pointer hover:text-[#009A90]" onClick={()=>{apiFetch(`/temas/${t.id}`).then(d=>{setDetailTema(d);setAdminTab('tema-detail')})}}>{t.nombre}</span></td><td className="px-4 py-2.5 text-gray-500 hidden md:table-cell">{t.curso}</td><td className="px-4 py-2.5 text-center text-gray-500">{t.total_evidencias}</td><td className="px-4 py-2.5"><div className="flex gap-1 justify-end"><button onClick={()=>{setEditItem(t);setF({nombre:t.nombre,tronco:t.tronco,curso:t.curso,estado:t.estado});setShowForm('tema')}} className="text-gray-400 hover:text-[#009A90] p-1"><I.Edit/></button><button onClick={()=>{if(confirm('¿Eliminar?')){apiFetch(`/temas/${t.id}`,{method:'DELETE'}).then(loadAdmin)}}} className="text-gray-400 hover:text-red-500 p-1"><I.Trash/></button></div></td></tr>)}</tbody></table>
+            <div className="px-4 py-2 bg-gray-50 text-[11px] text-gray-400">{Math.min(filtered.length,80)} de {filtered.length}</div>
+          </div>
+        </div>}
+
+        {/* TEMA DETAIL */}
+        {adminTab==='tema-detail'&&detailTema&&<div>
+          <button onClick={()=>setAdminTab('temas')} className="flex items-center gap-1 text-[13px] text-gray-500 hover:text-[#009A90] mb-4"><I.Back s={16}/>Volver</button>
+          <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4"><p className="text-[16px] font-bold">{detailTema.nombre}</p><p className="text-[12px] text-gray-400">{detailTema.curso} · {detailTema.evidencias?.length||0} docs</p></div>
+          <form onSubmit={async e=>{e.preventDefault();try{await apiFetch('/evidencias',{method:'POST',body:JSON.stringify({tema_id:detailTema.id,nombre_archivo:f.en,tipo:f.et||'GPC [GER]',cita_vancouver:f.ec||'',acceso_directo:f.ea||''})});setF(p=>({...p,en:'',ec:'',ea:''}));const t=await apiFetch(`/temas/${detailTema.id}`);setDetailTema(t)}catch(err){alert(err.message)}}} className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4 space-y-2">
+            <p className="text-[13px] font-semibold text-gray-700">Agregar documento</p>
+            <input value={f.en||''} onChange={e=>uf('en',e.target.value)} required placeholder="Nombre del archivo" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-white focus:border-[#009A90]"/>
+            <div className="grid grid-cols-2 gap-2"><select value={f.et||'GPC [GER]'} onChange={e=>uf('et',e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-white">{['GPC [GER]','GPC [GRR]','NOM','PRONAM','Lineamiento','SSa'].map(t=><option key={t}>{t}</option>)}</select><input value={f.ea||''} onChange={e=>uf('ea',e.target.value)} placeholder="Acceso directo" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-white focus:border-[#009A90]"/></div>
+            <textarea value={f.ec||''} onChange={e=>uf('ec',e.target.value)} rows={2} placeholder="Cita Vancouver" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[12px] bg-white focus:border-[#009A90]"/>
+            <button type="submit" className="bg-[#009A90] text-white px-4 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A]">Agregar</button>
+          </form>
+          {detailTema.evidencias&&detailTema.evidencias.map(ev=>{const s=ts(ev.tipo);return<div key={ev.id} className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-2 flex items-start justify-between gap-3"><div className="flex-1 min-w-0"><span className="px-2 py-0.5 rounded text-[10px] font-semibold" style={{backgroundColor:s.bg,color:s.fg}}>{ev.tipo}</span><p className="text-[12px] font-medium mt-1">{ev.nombre_archivo}</p></div><button onClick={()=>{if(confirm('¿Eliminar?')){apiFetch(`/evidencias/${ev.id}`,{method:'DELETE'}).then(()=>apiFetch(`/temas/${detailTema.id}`).then(setDetailTema))}}} className="text-gray-400 hover:text-red-500 p-1 shrink-0"><I.Trash/></button></div>})}
+        </div>}
+
+        {/* UPLOAD */}
+        {adminTab==='upload'&&<div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-2"><I.Upload s={20}/><p className="text-[14px] font-semibold">Carga masiva desde Excel</p></div>
+          <p className="text-[12px] text-gray-500 mb-4">Sube un .xlsx con el formato de Evidencias de GPC</p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input ref={fileRef} type="file" accept=".xlsx,.xls" className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-50 file:mr-3 file:px-3 file:py-1 file:rounded-lg file:border-0 file:bg-[#009A90] file:text-white file:font-semibold file:text-[11px] file:cursor-pointer"/>
+            <button onClick={handleUpload} disabled={uploading} className="bg-[#009A90] text-white px-4 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A] disabled:opacity-50 shrink-0">{uploading?'Procesando...':'Cargar'}</button>
+          </div>
+          {uploadResult&&<div className={`mt-3 text-[12px] rounded-lg px-3 py-2 border ${uploadResult.ok?'bg-green-50 border-green-200 text-green-700':'bg-red-50 border-red-200 text-red-700'}`}>{uploadResult.msg}</div>}
+        </div>}
+
+        {/* PUBLICACIONES ADMIN */}
+        {adminTab==='publicaciones'&&<div>
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-[14px] font-semibold">Publicaciones</p>
+            <button onClick={()=>{setShowForm('pub');setEditItem(null);setF({titulo:'',descripcion:'',imagen_url:'',categoria:'Actualización',enlace_url:'',fuente:'',destacado:false})}} className="flex items-center gap-1.5 bg-[#009A90] text-white px-3 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A]"><I.Plus/>Nueva</button>
+          </div>
+          {showForm==='pub'&&<form onSubmit={async e=>{e.preventDefault();try{if(editItem)await apiFetch(`/publicaciones/${editItem.id}`,{method:'PUT',body:JSON.stringify(f)});else await apiFetch('/publicaciones',{method:'POST',body:JSON.stringify(f)});setShowForm(null);apiFetch('/publicaciones/all').then(setAllPubs);apiFetch('/publicaciones?limit=6').then(setPublicaciones)}catch(err){alert(err.message)}}} className="bg-white border border-gray-200 rounded-xl p-4 mb-4 space-y-3">
+            <input value={f.titulo||''} onChange={e=>uf('titulo',e.target.value)} required placeholder="Título de la publicación" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+            <textarea value={f.descripcion||''} onChange={e=>uf('descripcion',e.target.value)} rows={2} placeholder="Descripción" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+            <input value={f.imagen_url||''} onChange={e=>uf('imagen_url',e.target.value)} placeholder="URL de imagen (para la card en el inicio)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+            {f.imagen_url&&<div className="border border-gray-200 rounded-lg p-2"><p className="text-[10px] text-gray-400 mb-1">Vista previa</p><img src={f.imagen_url} className="max-h-24 rounded" onError={e=>e.target.style.display='none'}/></div>}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <select value={f.categoria||''} onChange={e=>uf('categoria',e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-[13px]"><option>Actualización</option><option>Nueva GPC</option><option>Nueva NOM</option><option>Lineamiento</option><option>PRONAM</option><option>ENARM</option></select>
+              <input value={f.enlace_url||''} onChange={e=>uf('enlace_url',e.target.value)} placeholder="URL destino" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+              <input value={f.fuente||''} onChange={e=>uf('fuente',e.target.value)} placeholder="Fuente" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+              <label className="flex items-center gap-2 text-[13px] text-gray-600"><input type="checkbox" checked={f.destacado||false} onChange={e=>uf('destacado',e.target.checked)}/>Destacar</label>
+            </div>
+            <div className="flex gap-2"><button type="submit" className="bg-[#009A90] text-white px-4 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A]">{editItem?'Actualizar':'Crear'}</button><button type="button" onClick={()=>setShowForm(null)} className="px-4 py-2 rounded-lg text-[12px] text-gray-500 border border-gray-200 hover:bg-gray-50">Cancelar</button></div>
+          </form>}
+          {allPubs.map(p=>{const cc=catColor(p.categoria);return<div key={p.id} className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-2 flex items-center justify-between">
+            <div><div className="flex items-center gap-2 mb-0.5"><span className="px-2 py-0.5 rounded text-[10px] font-semibold" style={{backgroundColor:cc.bg,color:cc.fg}}>{p.categoria}</span><span className="text-[11px] text-gray-400">{p.fecha}</span>{p.destacado===1&&<span className="text-amber-500"><I.Star s={12}/></span>}</div><p className="text-[13px] font-medium">{p.titulo}</p></div>
+            <div className="flex gap-1 shrink-0"><button onClick={()=>{setEditItem(p);setF({titulo:p.titulo,descripcion:p.descripcion,imagen_url:p.imagen_url||'',categoria:p.categoria,enlace_url:p.enlace_url,fuente:p.fuente,destacado:p.destacado===1});setShowForm('pub')}} className="text-gray-400 hover:text-[#009A90] p-1"><I.Edit/></button><button onClick={()=>{if(confirm('¿Eliminar?')){apiFetch(`/publicaciones/${p.id}`,{method:'DELETE'}).then(()=>{apiFetch('/publicaciones/all').then(setAllPubs);apiFetch('/publicaciones?limit=6').then(setPublicaciones)})}}} className="text-gray-400 hover:text-red-500 p-1"><I.Trash/></button></div>
+          </div>})}
+        </div>}
+
+        {/* BANNERS */}
+        {adminTab==='banners'&&<div>
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-[14px] font-semibold">Publicidad</p>
+            <button onClick={()=>{setShowForm('banner');setEditItem(null);setF({titulo:'',descripcion:'',imagen_url:'',enlace_url:'',posicion:'resultados',activo:1,fecha_inicio:'',fecha_fin:''})}} className="flex items-center gap-1.5 bg-[#009A90] text-white px-3 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A]"><I.Plus/>Nuevo</button>
+          </div>
+          {showForm==='banner'&&<form onSubmit={async e=>{e.preventDefault();try{const body={titulo:f.titulo,descripcion:f.descripcion,imagen_url:f.imagen_url,enlace_url:f.enlace_url,posicion:f.posicion,activo:parseInt(f.activo),fecha_inicio:f.fecha_inicio||null,fecha_fin:f.fecha_fin||null};if(editItem)await apiFetch(`/banners/${editItem.id}`,{method:'PUT',body:JSON.stringify(body)});else await apiFetch('/banners',{method:'POST',body:JSON.stringify(body)});setShowForm(null);apiFetch('/banners/all').then(setAllBanners);apiFetch('/banners').then(setBanners)}catch(err){alert(err.message)}}} className="bg-white border border-gray-200 rounded-xl p-4 mb-4 space-y-3">
+            <input value={f.titulo||''} onChange={e=>uf('titulo',e.target.value)} required placeholder="Título del anuncio" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+            <input value={f.descripcion||''} onChange={e=>uf('descripcion',e.target.value)} placeholder="Descripción" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+            <div className="grid grid-cols-2 gap-3">
+              <input value={f.imagen_url||''} onChange={e=>uf('imagen_url',e.target.value)} placeholder="URL de imagen (opcional)" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+              <input value={f.enlace_url||''} onChange={e=>uf('enlace_url',e.target.value)} placeholder="URL de destino" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              <select value={f.posicion||''} onChange={e=>uf('posicion',e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-[13px]"><option value="header">Header</option><option value="resultados">Resultados</option><option value="detalle">Sidebar</option></select>
+              <select value={f.activo||1} onChange={e=>uf('activo',e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-[13px]"><option value={1}>Activo</option><option value={0}>Inactivo</option></select>
+              <div><label className="block text-[10px] text-gray-400 mb-0.5">Fecha inicio</label><input type="date" value={f.fecha_inicio||''} onChange={e=>uf('fecha_inicio',e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] focus:border-[#009A90]"/></div>
+              <div><label className="block text-[10px] text-gray-400 mb-0.5">Fecha fin</label><input type="date" value={f.fecha_fin||''} onChange={e=>uf('fecha_fin',e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] focus:border-[#009A90]"/></div>
+            </div>
+            {f.imagen_url&&<div className="border border-gray-200 rounded-lg p-2"><p className="text-[10px] text-gray-400 mb-1">Vista previa</p><img src={f.imagen_url} className="max-h-20 rounded" onError={e=>e.target.style.display='none'}/></div>}
+            <div className="flex gap-2"><button type="submit" className="bg-[#009A90] text-white px-4 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A]">{editItem?'Actualizar':'Crear'}</button><button type="button" onClick={()=>setShowForm(null)} className="px-4 py-2 rounded-lg text-[12px] text-gray-500 border border-gray-200 hover:bg-gray-50">Cancelar</button></div>
+          </form>}
+          {allBanners.map(b=><div key={b.id} className={`bg-white border border-gray-200 rounded-xl px-4 py-3 mb-2 flex items-center justify-between ${b.activo?'':'opacity-50'}`}><div className="flex items-center gap-3">{b.imagen_url&&<img src={b.imagen_url} className="w-10 h-10 rounded object-cover" onError={e=>e.target.style.display='none'}/>}<div><p className="text-[13px] font-medium">{b.titulo}</p><p className="text-[11px] text-gray-400">{b.posicion} · {b.activo?'Activo':'Inactivo'}{b.fecha_inicio?` · ${b.fecha_inicio}`:''}{b.fecha_fin?` a ${b.fecha_fin}`:''}</p></div></div><div className="flex gap-1"><button onClick={()=>{setEditItem(b);setF({titulo:b.titulo,descripcion:b.descripcion,imagen_url:b.imagen_url||'',enlace_url:b.enlace_url,posicion:b.posicion,activo:b.activo,fecha_inicio:b.fecha_inicio||'',fecha_fin:b.fecha_fin||''});setShowForm('banner')}} className="text-gray-400 hover:text-[#009A90] p-1"><I.Edit/></button><button onClick={()=>{if(confirm('¿Eliminar?')){apiFetch(`/banners/${b.id}`,{method:'DELETE'}).then(()=>{apiFetch('/banners/all').then(setAllBanners);apiFetch('/banners').then(setBanners)})}}} className="text-gray-400 hover:text-red-500 p-1"><I.Trash/></button></div></div>)}
+        </div>}
+
+        {/* USUARIOS */}
+        {adminTab==='usuarios'&&<div>
+          <p className="text-[14px] font-semibold mb-4">Usuarios registrados</p>
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <table className="w-full text-left"><thead><tr className="border-b border-gray-100 text-[11px] text-gray-400 uppercase tracking-wider"><th className="px-4 py-2.5">Nombre</th><th className="px-4 py-2.5">Email</th><th className="px-4 py-2.5 hidden md:table-cell">Especialidades</th><th className="px-4 py-2.5">Rol</th><th className="px-4 py-2.5 hidden md:table-cell">Registro</th><th className="px-4 py-2.5 w-20"></th></tr></thead>
+            <tbody className="text-[13px]">{(f._users||[]).map(u=>(
+              <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                <td className="px-4 py-2.5 font-medium">{u.nombre}</td>
+                <td className="px-4 py-2.5 text-gray-500">{u.email}</td>
+                <td className="px-4 py-2.5 text-gray-400 text-[11px] hidden md:table-cell">{u.especialidades||'—'}</td>
+                <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${u.role==='admin'?'bg-[#E6F5F4] text-[#009A90]':'bg-gray-100 text-gray-500'}`}>{u.role}</span></td>
+                <td className="px-4 py-2.5 text-gray-400 text-[11px] hidden md:table-cell">{u.created_at?.split('T')[0]||'—'}</td>
+                <td className="px-4 py-2.5"><button onClick={()=>{const newRole=u.role==='admin'?'usuario':'admin';if(confirm(`¿Cambiar rol de ${u.nombre} a ${newRole}?`)){apiFetch(`/auth/users/${u.id}/role`,{method:'PUT',body:JSON.stringify({role:newRole})}).then(()=>apiFetch('/auth/users').then(d=>setF(p=>({...p,_users:d}))))}}} className="text-[11px] text-gray-400 hover:text-[#009A90] underline">{u.role==='admin'?'Quitar admin':'Hacer admin'}</button></td>
+              </tr>
+            ))}</tbody></table>
+            <div className="px-4 py-2 bg-gray-50 text-[11px] text-gray-400">{(f._users||[]).length} usuarios</div>
+          </div>
+        </div>}
+
+        {/* REPORTES */}
+        {adminTab==='reportes'&&<div>
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-[14px] font-semibold">Reportes y sugerencias</p>
+            <div className="flex gap-2">
+              {['todos','pendiente','en revisión','resuelto'].map(e=><button key={e} onClick={()=>{const q=e==='todos'?'':e;apiFetch(`/reportes${q?'?estado='+q:''}`).then(d=>setF(p=>({...p,_reportes:d})))}} className="text-[11px] px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 capitalize">{e}</button>)}
+            </div>
+          </div>
+          {(f._reportes||[]).length===0&&<p className="text-center text-gray-400 py-8 text-[13px]">Sin reportes</p>}
+          {(f._reportes||[]).map(r=>(
+            <div key={r.id} className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${r.estado==='pendiente'?'bg-amber-50 text-amber-700':r.estado==='en revisión'?'bg-blue-50 text-blue-700':'bg-green-50 text-green-700'}`}>{r.estado}</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600">{r.categoria}</span>
+                    <span className="text-[11px] text-gray-400">{r.created_at?.split('T')[0]}</span>
+                  </div>
+                  <p className="text-[13px] text-gray-800">{r.mensaje}</p>
+                  <p className="text-[11px] text-gray-400 mt-1">Por: {r.user_nombre||'Anónimo'} ({r.user_email||'—'}){r.evidencia_nombre?` · Doc: ${r.evidencia_nombre}`:''}</p>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  {r.estado==='pendiente'&&<button onClick={()=>{apiFetch(`/reportes/${r.id}`,{method:'PUT',body:JSON.stringify({estado:'en revisión'})}).then(()=>apiFetch('/reportes').then(d=>setF(p=>({...p,_reportes:d}))))}} className="text-[11px] text-blue-500 hover:underline">Revisar</button>}
+                  {r.estado==='en revisión'&&<button onClick={()=>{apiFetch(`/reportes/${r.id}`,{method:'PUT',body:JSON.stringify({estado:'resuelto'})}).then(()=>apiFetch('/reportes').then(d=>setF(p=>({...p,_reportes:d}))))}} className="text-[11px] text-green-600 hover:underline">Resolver</button>}
+                  <button onClick={()=>{if(confirm('¿Eliminar?')){apiFetch(`/reportes/${r.id}`,{method:'DELETE'}).then(()=>apiFetch('/reportes').then(d=>setF(p=>({...p,_reportes:d}))))}}} className="text-gray-400 hover:text-red-500 p-1"><I.Trash/></button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>}
+      </main>
+    );
+  };
+
+  /* ── LEGAL VIEW ── */
+  const [legalPage,setLegalPage]=useState(null);
+  const LegalView=()=>{
+    const pages={
+      privacidad:{title:'Aviso de Privacidad',content:`
+AVISO DE PRIVACIDAD INTEGRAL
+
+En cumplimiento con la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP), Catálogo de Salud pone a su disposición el presente Aviso de Privacidad.
+
+RESPONSABLE DEL TRATAMIENTO DE DATOS PERSONALES
+Catálogo de Salud (en adelante "el Responsable") con domicilio en México, es responsable del tratamiento de sus datos personales.
+
+DATOS PERSONALES RECABADOS
+Para el registro y uso de nuestros servicios, recabamos los siguientes datos personales:
+• Nombre completo
+• Correo electrónico
+• Contraseña (almacenada de forma encriptada mediante bcrypt)
+
+No recabamos datos personales sensibles, financieros ni patrimoniales.
+
+FINALIDADES DEL TRATAMIENTO
+Sus datos personales serán utilizados para:
+• Crear y administrar su cuenta de usuario
+• Permitir el acceso a documentos oficiales de salud
+• Enviar comunicaciones relacionadas con actualizaciones de GPC, NOM y documentos oficiales
+• Gestionar reportes y sugerencias enviados por usted
+• Elaborar estadísticas internas de uso (de forma anónima)
+
+TRANSFERENCIA DE DATOS
+Sus datos personales NO serán transferidos ni compartidos con terceros nacionales o internacionales, salvo en los casos previstos por la Ley.
+
+DERECHOS ARCO
+Usted tiene derecho a Acceder, Rectificar, Cancelar u Oponerse al tratamiento de sus datos personales (Derechos ARCO). Para ejercer estos derechos, envíe un correo electrónico a: contacto@catalogosalud.com indicando su nombre, correo registrado y el derecho que desea ejercer. Responderemos en un plazo máximo de 20 días hábiles.
+
+REVOCACIÓN DEL CONSENTIMIENTO
+Usted puede revocar su consentimiento para el tratamiento de sus datos en cualquier momento, enviando una solicitud al correo antes mencionado.
+
+COOKIES
+Este sitio utiliza cookies técnicas necesarias para el funcionamiento del servicio (autenticación de sesión). No utilizamos cookies de rastreo ni de publicidad de terceros.
+
+MODIFICACIONES AL AVISO DE PRIVACIDAD
+Nos reservamos el derecho de modificar este Aviso de Privacidad. Cualquier cambio será publicado en esta misma página con la fecha de actualización.
+
+Última actualización: Abril 2026.`},
+
+      terminos:{title:'Términos y Condiciones',content:`
+TÉRMINOS Y CONDICIONES DE USO
+
+Al acceder y utilizar el sitio web Catálogo de Salud (en adelante "el Sitio"), usted acepta los presentes Términos y Condiciones.
+
+1. DESCRIPCIÓN DEL SERVICIO
+Catálogo de Salud es una plataforma de consulta que facilita el acceso a Guías de Práctica Clínica (GPC), Normas Oficiales Mexicanas (NOM), PRONAM, lineamientos y otros documentos oficiales publicados por instituciones del Sistema Nacional de Salud de México.
+
+2. NATURALEZA INFORMATIVA
+El contenido de este sitio es estrictamente informativo y educativo. NO constituye asesoría médica, diagnóstico ni tratamiento. Consulte siempre a un profesional de la salud calificado.
+
+3. PROPIEDAD INTELECTUAL
+Los documentos enlazados (GPC, NOM, lineamientos) son propiedad de sus respectivas instituciones emisoras: Secretaría de Salud (SSa), IMSS, ISSSTE, CENETEC y demás organismos del gobierno mexicano. Catálogo de Salud no reclama autoría ni propiedad sobre dichos documentos. Este sitio únicamente facilita el acceso a documentos de carácter público con fines educativos.
+
+4. REGISTRO DE USUARIOS
+Para acceder a los documentos es necesario crear una cuenta gratuita. Al registrarse, usted se compromete a:
+• Proporcionar información veraz y actualizada
+• Mantener la confidencialidad de su contraseña
+• No compartir su cuenta con terceros
+• Utilizar el servicio exclusivamente con fines educativos y profesionales
+
+5. CONTENIDO PUBLICITARIO
+El Sitio puede mostrar contenido promocional de productos y servicios educativos relacionados con el ámbito médico. Dicho contenido estará identificado como publicidad.
+
+6. LIMITACIÓN DE RESPONSABILIDAD
+Catálogo de Salud no garantiza:
+• La disponibilidad permanente de los enlaces a documentos oficiales
+• La vigencia o actualización de los documentos enlazados
+• La exactitud de la información contenida en documentos de terceros
+El usuario es responsable de verificar la vigencia de cualquier documento consultado.
+
+7. REPORTES Y SUGERENCIAS
+Los usuarios registrados pueden enviar reportes sobre enlaces rotos o sugerir nuevos documentos. Estos reportes serán revisados por el equipo administrativo.
+
+8. MODIFICACIONES
+Nos reservamos el derecho de modificar estos Términos en cualquier momento. El uso continuado del Sitio después de los cambios constituye su aceptación.
+
+9. LEGISLACIÓN APLICABLE
+Estos Términos se rigen por las leyes federales de los Estados Unidos Mexicanos.
+
+Última actualización: Abril 2026.`},
+
+      deslinde:{title:'Deslinde de Responsabilidad',content:`
+DESLINDE DE RESPONSABILIDAD MÉDICA Y LEGAL
+
+1. CARÁCTER INFORMATIVO
+Catálogo de Salud es una plataforma de consulta educativa. Todo el contenido disponible tiene fines exclusivamente informativos y de referencia académica. No sustituye en ningún caso la consulta, diagnóstico o tratamiento médico profesional.
+
+2. DOCUMENTOS DE TERCEROS
+Los documentos accesibles a través de esta plataforma (GPC, NOM, PRONAM, lineamientos) son elaborados y publicados por instituciones del gobierno mexicano:
+• Secretaría de Salud (SSa)
+• Instituto Mexicano del Seguro Social (IMSS)
+• Instituto de Seguridad y Servicios Sociales de los Trabajadores del Estado (ISSSTE)
+• Centro Nacional de Excelencia Tecnológica en Salud (CENETEC)
+
+Catálogo de Salud NO es autor, editor ni propietario de dichos documentos. Estos son documentos de acceso público conforme a la Ley General de Transparencia y Acceso a la Información Pública.
+
+3. ENLACES Y RESPALDOS
+Los documentos se enlazan a sus fuentes oficiales cuando están disponibles. Los respaldos en servicios de almacenamiento se proporcionan como alternativa cuando los enlaces oficiales no están disponibles, con fines estrictamente educativos.
+
+4. SIN RELACIÓN GUBERNAMENTAL
+Catálogo de Salud NO es una entidad gubernamental ni está afiliado a ninguna institución de salud pública. Es un proyecto independiente de carácter educativo.
+
+5. EXENCIÓN DE RESPONSABILIDAD
+No nos hacemos responsables de:
+• Decisiones médicas tomadas con base en la información consultada
+• La disponibilidad o vigencia de los documentos enlazados
+• Errores u omisiones en documentos publicados por terceros
+• Daños derivados del uso de la información proporcionada
+
+6. USO RECOMENDADO
+Los profesionales de la salud y estudiantes de medicina deben siempre:
+• Consultar las fuentes oficiales más recientes
+• Verificar la vigencia de las guías antes de aplicarlas
+• Complementar con criterio clínico profesional
+
+Última actualización: Abril 2026.`},
+
+      cookies:{title:'Política de Cookies',content:`
+POLÍTICA DE COOKIES
+
+1. ¿QUÉ SON LAS COOKIES?
+Las cookies son pequeños archivos de texto que se almacenan en su dispositivo al visitar un sitio web. Permiten recordar sus preferencias y mejorar su experiencia de navegación.
+
+2. COOKIES QUE UTILIZAMOS
+Catálogo de Salud utiliza únicamente cookies técnicas esenciales:
+
+• Cookie de autenticación (token JWT): Almacenada en localStorage, permite mantener su sesión activa durante 7 días sin necesidad de volver a iniciar sesión. Contiene un identificador cifrado, no sus datos personales.
+
+• Cookie de preferencias de interfaz: Almacena su preferencia de vista (última búsqueda, filtros seleccionados).
+
+3. COOKIES QUE NO UTILIZAMOS
+NO utilizamos:
+• Cookies de rastreo o seguimiento
+• Cookies de publicidad de terceros (Google Ads, Facebook Pixel, etc.)
+• Cookies de análisis de terceros (Google Analytics, etc.)
+• Cookies de redes sociales
+
+4. CONTROL DE COOKIES
+Usted puede eliminar las cookies almacenadas en cualquier momento:
+• Cerrando sesión en el Sitio (elimina el token de autenticación)
+• Limpiando los datos del navegador (Configuración > Privacidad > Borrar datos de navegación)
+
+5. BASE LEGAL
+El uso de cookies técnicas esenciales está amparado por la LFPDPPP y no requiere consentimiento expreso, ya que son necesarias para el funcionamiento del servicio.
+
+Última actualización: Abril 2026.`}
+    };
+    const p=pages[legalPage];
+    if(!p)return null;
+    return(
+      <main className="max-w-[700px] mx-auto px-4 md:px-8 py-8">
+        <button onClick={()=>{setLegalPage(null);setView('home')}} className="flex items-center gap-1 text-[13px] text-gray-500 hover:text-[#009A90] mb-6"><I.Back s={16}/>Volver al inicio</button>
+        <h1 className="text-[24px] font-bold text-[#111] mb-6">{p.title}</h1>
+        <div className="bg-white border border-gray-200 rounded-xl p-6 md:p-8">
+          <pre className="text-[13px] text-gray-700 leading-relaxed whitespace-pre-wrap font-[Inter,system-ui,sans-serif]">{p.content.trim()}</pre>
+        </div>
+      </main>
+    );
+  };
+
+  /* ── FOOTER ── */
+  const Footer=()=>(
+    <footer className="border-t border-gray-100 bg-white mt-12 no-print">
+      <div className="max-w-[960px] mx-auto px-4 md:px-8 py-6">
+        <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+          <div>
+            <p className="text-[13px] font-bold text-gray-700 mb-1">Catálogo de Salud</p>
+            <p className="text-[11px] text-gray-400">GPC, NOM, PRONAM y documentos oficiales mexicanos</p>
+            <p className="text-[10px] text-gray-400 mt-2">Los documentos enlazados son propiedad de sus instituciones emisoras (SSa, IMSS, ISSSTE, CENETEC). Este catálogo facilita su consulta con fines educativos. No sustituye la consulta médica profesional.</p>
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] shrink-0">
+            <button onClick={()=>{setLegalPage('privacidad');setView('legal')}} className="text-gray-400 hover:text-[#009A90]">Aviso de Privacidad</button>
+            <button onClick={()=>{setLegalPage('terminos');setView('legal')}} className="text-gray-400 hover:text-[#009A90]">Términos y Condiciones</button>
+            <button onClick={()=>{setLegalPage('deslinde');setView('legal')}} className="text-gray-400 hover:text-[#009A90]">Deslinde de Responsabilidad</button>
+            <button onClick={()=>{setLegalPage('cookies');setView('legal')}} className="text-gray-400 hover:text-[#009A90]">Política de Cookies</button>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+
+  if(view==='admin'&&!isAdmin){setView('auth');setAuthMode('login')}
+
+  return(
+    <div className="w-full min-h-screen flex flex-col">
+      <Header/>
+      <div className="flex-1">
+        {view==='home'&&<HomeView/>}
+        {view==='search'&&<SearchView/>}
+        {view==='auth'&&<AuthView/>}
+        {view==='admin'&&isAdmin&&<AdminView/>}
+        {view==='legal'&&<LegalView/>}
+      </div>
+      <Footer/>
+      {/* REPORT MODAL */}
+      {reportModal&&<div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100] p-4 fade-in" onClick={()=>setReportModal(null)}>
+        <div className="bg-white rounded-xl p-5 w-full max-w-[420px] shadow-2xl scale-in" onClick={e=>e.stopPropagation()}>
+          {reportSent?<div className="text-center py-4"><div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-3 text-green-600"><I.Flag s={20}/></div><p className="text-[15px] font-semibold text-[#111] mb-1">Reporte enviado</p><p className="text-[13px] text-gray-500 mb-4">Gracias por tu contribución. Revisaremos tu reporte.</p><button onClick={()=>setReportModal(null)} className="bg-[#009A90] text-white px-4 py-2 rounded-lg text-[13px] font-semibold hover:bg-[#00857A]">Cerrar</button></div>:(
+          <div>
+            <h3 className="text-[16px] font-bold text-[#111] mb-1">Reportar documento</h3>
+            <p className="text-[12px] text-gray-500 mb-3 truncate">{reportModal.nombre}</p>
+            <div className="space-y-3">
+              <div><label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Categoría</label>
+                <select value={reportCat} onChange={e=>setReportCat(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]">
+                  <option>Enlace roto</option><option>Información incorrecta</option><option>Sugerir nueva GPC</option><option>Documento duplicado</option><option>Otro</option>
+                </select>
+              </div>
+              <div><label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1">Mensaje</label>
+                <textarea value={reportMsg} onChange={e=>setReportMsg(e.target.value)} rows={3} placeholder="Describe el problema o sugerencia..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:border-[#009A90]"/>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={async()=>{if(!reportMsg.trim())return;try{await apiFetch('/reportes',{method:'POST',body:JSON.stringify({evidencia_id:reportModal.evidencia_id,categoria:reportCat,mensaje:reportMsg})});setReportSent(true)}catch(err){alert(err.message)}}} disabled={!reportMsg.trim()} className="bg-[#009A90] text-white px-4 py-2 rounded-lg text-[12px] font-semibold hover:bg-[#00857A] disabled:opacity-50">Enviar reporte</button>
+                <button onClick={()=>setReportModal(null)} className="px-4 py-2 rounded-lg text-[12px] text-gray-500 border border-gray-200 hover:bg-gray-50">Cancelar</button>
+              </div>
+            </div>
+          </div>)}
+        </div>
+      </div>}
+    </div>
+  );
+}
+
+const root=ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>
