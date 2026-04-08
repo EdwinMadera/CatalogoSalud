@@ -105,7 +105,7 @@ const I={
    ════════════════════════════════════ */
 function App(){
   const [view,setView]=useState('home'); // home|search|auth|admin
-  const [searchText,setSearchText]=useState('');
+  const searchRef=useRef(null);
   const [activeQuery,setActiveQuery]=useState('');
   const [tipoFilter,setTipoFilter]=useState('');
   const [cursoFilter,setCursoFilter]=useState('');
@@ -163,8 +163,8 @@ function App(){
   useEffect(()=>{if(view==='search'&&(activeQuery||tipoFilter||cursoFilter||troncoFilter))doSearch();else if(view==='search'&&!activeQuery&&!tipoFilter&&!cursoFilter&&!troncoFilter){setResults([]);setTotalResults(0)}},[doSearch,view]);
   useEffect(()=>{setPage(0)},[activeQuery,tipoFilter,cursoFilter,troncoFilter]);
 
-  const handleSearch=(e)=>{if(e)e.preventDefault();setActiveQuery(searchText.trim());setView('search')};
-  const clearAll=()=>{setSearchText('');setActiveQuery('');setTipoFilter('');setCursoFilter('');setTroncoFilter('')};
+  const handleSearch=(e)=>{if(e)e.preventDefault();const val=searchRef.current?searchRef.current.value.trim():'';setActiveQuery(val);setView('search')};
+  const clearAll=()=>{if(searchRef.current)searchRef.current.value='';setActiveQuery('');setTipoFilter('');setCursoFilter('');setTroncoFilter('')};
   const hasFilters=tipoFilter||cursoFilter||troncoFilter||activeQuery;
   const totalPages=Math.ceil(totalResults/LIMIT);
   const logout=()=>{clearAuth();setUser(null);setView('home')};
@@ -225,7 +225,7 @@ function App(){
       <form onSubmit={handleSearch} className="flex gap-2 mb-8 slide-up delay-1">
         <div className="flex-1 relative">
           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"><I.Search s={18}/></div>
-          <input type="text" value={searchText} onChange={e=>setSearchText(e.target.value)}
+          <input type="text" ref={searchRef} defaultValue=""
             placeholder="Buscar GPC por título, tema o especialidad..."
             className="w-full bg-white border border-gray-200 rounded-xl py-3.5 pl-11 pr-4 text-[14px] text-[#111] placeholder:text-gray-400 focus:border-[#009A90] transition-colors shadow-sm"/>
         </div>
@@ -331,10 +331,10 @@ function App(){
       <form onSubmit={handleSearch} className="flex gap-2 mb-4">
         <div className="flex-1 relative">
           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"><I.Search s={18}/></div>
-          <input type="text" value={searchText} onChange={e=>setSearchText(e.target.value)}
+          <input type="text" ref={searchRef} defaultValue=""
             placeholder="Buscar GPC por título, tema o especialidad..."
             className="w-full bg-white border border-gray-200 rounded-xl py-3 pl-11 pr-4 text-[14px] placeholder:text-gray-400 focus:border-[#009A90] transition-colors"/>
-          {searchText&&<button type="button" onClick={()=>{setSearchText('');setActiveQuery('')}} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><I.X s={16}/></button>}
+          {activeQuery&&<button type="button" onClick={()=>{if(searchRef.current)searchRef.current.value='';setActiveQuery('')}} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><I.X s={16}/></button>}
         </div>
         <button type="submit" className="bg-[#009A90] text-white px-5 py-3 rounded-xl text-[13px] font-semibold hover:bg-[#00857A] transition-colors shrink-0">Buscar</button>
       </form>
