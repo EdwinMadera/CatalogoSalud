@@ -160,7 +160,7 @@ function App(){
     apiFetch(`/evidencias?${p}`).then(r=>{setResults(r.data);setTotalResults(r.total);setLoading(false)}).catch(()=>setLoading(false));
   },[activeQuery,tipoFilter,cursoFilter,troncoFilter,page]);
 
-  useEffect(()=>{if(view==='search')doSearch()},[doSearch,view]);
+  useEffect(()=>{if(view==='search'&&(activeQuery||tipoFilter||cursoFilter||troncoFilter))doSearch();else if(view==='search'&&!activeQuery&&!tipoFilter&&!cursoFilter&&!troncoFilter){setResults([]);setTotalResults(0)}},[doSearch,view]);
   useEffect(()=>{setPage(0)},[activeQuery,tipoFilter,cursoFilter,troncoFilter]);
 
   const handleSearch=(e)=>{if(e)e.preventDefault();setActiveQuery(searchText.trim());setView('search')};
