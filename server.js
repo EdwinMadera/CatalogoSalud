@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -6,6 +7,7 @@ const Database = require('better-sqlite3');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+app.set('trust proxy', 1); // detrás de Nginx/Railway: rate-limit usa la IP real
 
 // Database
 const db = new Database(path.join(__dirname, 'db', 'database.sqlite'));
@@ -23,12 +25,17 @@ const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
 // Middleware
-app.use(cors());
+// CORS: restringe a CORS_ORIGIN (lista separada por comas) si está definido; si no, abierto.
+const corsOrigin = process.env.CORS_ORIGIN;
+app.use(cors(corsOrigin ? { origin: corsOrigin.split(',').map(o => o.trim()) } : {}));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Auth setup
 const { router: authRouter, authMiddleware, adminMiddleware } = require('./routes/auth')(db);
+
+// Healthcheck
+app.get('/api/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
 
 // Routes
 app.use('/api/auth', authRouter);
@@ -40,8 +47,8 @@ app.use('/api/publicaciones', require('./routes/publicaciones')(db, authMiddlewa
 app.use('/api/reportes', require('./routes/reportes')(db, authMiddleware, adminMiddleware));
 app.use('/api/categorias', require('./routes/categorias')(db, authMiddleware, adminMiddleware));
 
-// Stats endpoint
-app.get('/api/stats', (req, res) => {
+// Stats endpoint (solo admin — expone conteos internos)
+app.get('/api/stats', authMiddleware, adminMiddleware, (req, res) => {
   const totalTemas = db.prepare('SELECT COUNT(*) as c FROM temas').get().c;
   const publicados = db.prepare("SELECT COUNT(*) as c FROM temas WHERE estado = 'Publicado'").get().c;
   const borradores = db.prepare("SELECT COUNT(*) as c FROM temas WHERE estado = 'Borrador'").get().c;
@@ -56,9 +63,21 @@ app.get('/api/stats', (req, res) => {
   res.json({ totalTemas, publicados, borradores, totalEvidencias, cursos, troncos, totalUsuarios, porCurso, porTipo });
 });
 
+// API 404 — JSON en vez de caer al SPA fallback
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Endpoint no encontrado' });
+});
+
 // SPA fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Manejador global de errores — evita que un throw inesperado tumbe el proceso
+app.use((err, req, res, next) => {
+  console.error('Error no controlado:', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Error interno del servidor' });
 });
 
 app.listen(PORT, () => {

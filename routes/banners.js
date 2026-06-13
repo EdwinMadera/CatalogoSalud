@@ -2,12 +2,17 @@ const express = require('express');
 const router = express.Router();
 
 module.exports = function (db, authMiddleware, adminMiddleware) {
-  // GET /api/banners — Public: active banners
+  // GET /api/banners — Public: active banners (respeta vigencia por fecha)
   router.get('/', (req, res) => {
     const { posicion } = req.query;
+    const hoy = new Date().toISOString().split('T')[0];
     let sql = 'SELECT * FROM banners WHERE activo = 1';
     const params = [];
     if (posicion) { sql += ' AND posicion = ?'; params.push(posicion); }
+    // Si hay fecha_inicio/fecha_fin definidas, el banner solo se muestra dentro del rango.
+    sql += " AND (fecha_inicio IS NULL OR fecha_inicio = '' OR fecha_inicio <= ?)";
+    sql += " AND (fecha_fin IS NULL OR fecha_fin = '' OR fecha_fin >= ?)";
+    params.push(hoy, hoy);
     sql += ' ORDER BY orden ASC';
     res.json(db.prepare(sql).all(...params));
   });

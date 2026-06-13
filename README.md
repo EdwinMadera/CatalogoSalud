@@ -71,17 +71,27 @@ Esto lee el archivo `Evidencias de GPC.xlsx` y crea la base de datos con:
 
 ### Paso 4: Configurar variables de entorno
 
-Crear archivo `.env` o exportar variables:
+Copia `.env.example` a `.env` y ajústalo (el servidor carga `.env` automáticamente vía `dotenv`):
 
 ```bash
-export PORT=3000
-export JWT_SECRET="CAMBIAR-POR-UNA-CLAVE-SEGURA-DE-AL-MENOS-32-CARACTERES"
+cp .env.example .env
 ```
 
-**IMPORTANTE:** El JWT_SECRET debe ser una cadena larga y aleatoria. Ejemplo:
+Variables disponibles:
+
+| Variable | Obligatoria | Descripción |
+|----------|-------------|-------------|
+| `PORT` | No (def. 3000) | Puerto del servidor |
+| `JWT_SECRET` | **Sí en producción** | Clave para firmar JWT. 32+ caracteres aleatorios |
+| `NODE_ENV` | Recomendada | En `production` el servidor **no arranca sin `JWT_SECRET`** |
+| `CORS_ORIGIN` | No | Restringe CORS a estos orígenes (separados por coma). Si se omite, queda abierto |
+
+**IMPORTANTE:** El `JWT_SECRET` debe ser aleatorio. Genera uno con:
 ```bash
-export JWT_SECRET="k8Xp2mN9qR4tV7wZ0bD3fG6hJ1lO5sU8xA"
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
+
+En desarrollo, si no defines `JWT_SECRET` el servidor genera una clave temporal (las sesiones se invalidan al reiniciar). En `NODE_ENV=production` es obligatorio o el proceso se detiene.
 
 ### Paso 5: Probar que funciona
 
@@ -305,21 +315,24 @@ catalogo-salud/
 ## API — 30+ Endpoints
 
 ### Públicos
+- `GET /api/health` — Healthcheck (status + uptime)
 - `GET /api/evidencias?q=&tipo=&curso=&categoria_id=&limit=&offset=` — Buscar documentos
 - `GET /api/temas`, `/api/temas/cursos`, `/api/temas/troncos` — Clasificaciones
 - `GET /api/categorias` — Categorías del inicio
-- `GET /api/banners`, `/api/publicaciones` — Contenido público
-- `GET /api/stats` — Estadísticas
-- `POST /api/auth/register`, `/api/auth/login` — Autenticación
+- `GET /api/banners` (respeta vigencia por fecha), `/api/publicaciones` — Contenido público
+- `POST /api/auth/register`, `/api/auth/login` — Autenticación (con rate limiting: 20 intentos / 15 min por IP)
 
 ### Con login
 - `POST /api/reportes` — Enviar reporte
+- `PUT /api/auth/password` — Cambiar la propia contraseña
+- `PUT /api/auth/especialidades` — Actualizar especialidades
 
 ### Solo admin
+- `GET /api/stats` — Estadísticas (requiere token admin)
 - CRUD completo para: evidencias, temas, categorias, banners, publicaciones, reportes
 - `GET /api/auth/users` — Listar usuarios
 - `PUT /api/auth/users/:id/role` — Cambiar roles
-- `POST /api/upload/excel` — Carga masiva
+- `POST /api/upload/excel` — Carga masiva (máx. 10 MB, solo .xlsx/.xls)
 
 ## Credenciales por defecto
 
@@ -331,13 +344,21 @@ Admin:     admin@catalogosalud.com / admin123
 
 ## Checklist de seguridad para producción
 
-- [ ] Cambiar contraseña del admin
-- [ ] Configurar JWT_SECRET con clave segura (32+ caracteres)
+- [ ] Cambiar contraseña del admin (desde "Mi cuenta" en la web, o creando otro admin)
+- [x] `JWT_SECRET` obligatorio en producción (el servidor no arranca sin él si `NODE_ENV=production`)
+- [x] Rate limiting en login/registro (20 intentos / 15 min por IP)
+- [x] CORS configurable por dominio (variable `CORS_ORIGIN`)
+- [x] Endpoint de cambio de contraseña (`PUT /api/auth/password`)
+- [x] Manejador global de errores y healthcheck (`/api/health`)
+- [ ] Definir `NODE_ENV=production` y `CORS_ORIGIN` con tu dominio
 - [ ] HTTPS con certificado SSL (Let's Encrypt gratuito)
-- [ ] Configurar CORS solo para tu dominio
 - [ ] Backup diario de database.sqlite
-- [ ] Rate limiting (opcional, recomendado)
 - [ ] Firewall: solo permitir puertos 80, 443, 22
+
+> **Nota sobre `xlsx`:** la versión en npm (0.18.5) tiene avisos de seguridad sin parche en el registro. La carga de Excel está restringida a administradores y limitada a 10 MB con validación de tipo. Para eliminar el aviso, instala la versión parchada desde el CDN oficial de SheetJS cuando tengas acceso de red a `cdn.sheetjs.com`:
+> ```bash
+> npm install https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
+> ```
 
 ## Licencia
 
